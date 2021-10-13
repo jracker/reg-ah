@@ -1,0 +1,117 @@
+---
+title: "Assinaturas hidrológicas para bacias hidrográficas do SIN"
+author: "JDT"
+date: "24/05/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Pré-requisitos
+
+Pacotes necessários:
+
+```{r, message=FALSE}
+#if(!require(PSF)) install.packages("PSF")
+#if(!require(timetk)) remotes::install_github("business-science/timetk")
+if(!require(EflowStats)) remotes::install_github("USGS-R/EflowStats")
+
+
+pacotes <- c(
+  "here",
+  "usethis",
+  "data.table",
+  "HEobs",
+#  "PSF",
+  "tidyverse",
+  "lubridate",
+  "fs",
+  "checkmate",
+#  "xts",
+#  "hydroGOF",
+#  "ModelMetrics",
+#  "forecast",
+#  "timetk",
+  "EflowStats",
+  "NbClust",
+  "cluster",  
+  "cluster.datasets", 
+  "cowplot", 
+  "clValid",
+  "ggfortify", 
+  "clustree",
+  "dendextend",
+  "factoextra",
+  "FactoMineR",
+  "corrplot",
+  "GGally",
+  #"ggiraphExtra",
+  "kableExtra",
+  "tidymodels"
+)
+# Carregar os pacotes
+easypackages::libraries(pacotes)
+```
+
+Scripts:
+
+```{r}
+source(here('R', 'load-data.R'))
+source(here('R', 'utils.R'))
+source(here('R', 'prep-stn-data.R'))
+```
+
+## Dados de vazão
+
+Os dados importados de vazão devem ser regularmente espaçados no tempo. Esta adequação das séries diárias, se necessária, pode ser realizada com a função `complete_dates()` do pacote **`{lhmetools}`**. Assim assegura-se que todas estações possuam 1 observação por dia e sem datas faltantes.
+
+```{r}
+qnat_data <- qnat_dly_ons() %>%
+  select(date, qnat, code_stn) %>%
+  lhmetools::complete_dates(group = "code_stn")
+glimpse(qnat_data)
+```
+
+
+## Assinaturas hidrológicas para 1 posto
+
+Preparação dos dados para aplicação da função `calc_magnifSeven` com a opção de ano hidrológico (**water year**) para o posto 74 da ONS (G. B. Munhoz).
+
+```{r}
+qnat_posto <- qnat_data %>% 
+  sel_station(.,station = 74)  
+glimpse(qnat_posto)
+summary(qnat_posto)
+
+magnif7(stn_data = qnat_posto[-2])
+```
+
+
+## Assinaturas hidrológicas para todos postos
+
+
+Agrupo os dados por estações e extrai as sete assinaturas hidrológicas.
+
+```{r}
+by_stn <- qnat_data %>% 
+  group_by(code_stn) %>%
+  nest()
+  
+seven_stats <- by_stn %>%
+  mutate(stats = map(data, ~.x %>% magnif7))
+```
+
+
+```{r}
+seven_stats_tidy <- seven_stats %>%
+  select(stats) %>%
+  unnest() %>%
+  pivot_wider(names_from = indice, values_from = statistic) %>%
+  ungroup()
+seven_stats_tidy
+saveRDS(seven_stats_tidy, file = here('output', 'seven_stats.RDS'))
+```
